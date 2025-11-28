@@ -9,6 +9,7 @@
 // Domain Dedication along with this software. If not, see
 // <http://creativecommons.org/publicdomain/zero/1.0/>.
 //==============================================================================================
+#include "rtweekend.h"
 
 class interval {
 public:
@@ -35,7 +36,7 @@ public:
   static const interval empty, universe;
 };
 
-const interval interval::empty = interval(+infinity, -infinity);
-const interval interval::universe = interval(-infinity, +infinity);
+inline const interval interval::empty = interval(+infinity, -infinity);
+inline const interval interval::universe = interval(-infinity, +infinity);
 
 #endif

@@ -9,6 +9,7 @@
 // Domain Dedication along with this software. If not, see
 // <http://creativecommons.org/publicdomain/zero/1.0/>.
 //==============================================================================================
+#include "rtweekend.h"
 
 #include <cmath>
 #include <cstdlib>
@@ -19,6 +20,7 @@
 // C++ Std Usings
 
 using std::make_shared;
+
 using std::shared_ptr;
 
 // Constants
@@ -48,5 +50,6 @@ inline double random_double(double min, double max) {
 #include "interval.h"
 #include "ray.h"
 #include "vec3.h"
+#include <algorithm>
 
 #endif

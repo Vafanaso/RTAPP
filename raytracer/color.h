@@ -11,6 +11,7 @@
 // Domain Dedication along with this software. If not, see
 // <http://creativecommons.org/publicdomain/zero/1.0/>.
 //==============================================================================================
+#include "rtweekend.h"
 
 #include "interval.h"
 #include "vec3.h"
@@ -24,7 +25,7 @@ inline double linear_to_gamma(double linear_component) {
   return 0;
 }
 
-void write_color(std::ostream &out, const color &pixel_color) {
+inline void write_color(std::ostream &out, const color &pixel_color) {
   auto r = pixel_color.x();
   auto g = pixel_color.y();
   auto b = pixel_color.z();
