@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/gui_app.dir/src/main.cpp.o CMakeFiles/gui_app.dir/raytracer/rt_engine.cpp.o -o gui_app  libglad.a libimgui.a -lglfw -lGL -ldl -lpthread 

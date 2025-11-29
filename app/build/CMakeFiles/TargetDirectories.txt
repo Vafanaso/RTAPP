@@ -1,0 +1,5 @@
+/home/vafanaso/diploma/app/build/CMakeFiles/glad.dir
+/home/vafanaso/diploma/app/build/CMakeFiles/imgui.dir
+/home/vafanaso/diploma/app/build/CMakeFiles/gui_app.dir
+/home/vafanaso/diploma/app/build/CMakeFiles/edit_cache.dir
+/home/vafanaso/diploma/app/build/CMakeFiles/rebuild_cache.dir
