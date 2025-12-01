@@ -44,26 +44,16 @@ file(GLOB RAYTRACER_SRC
 # -------------------------
 add_executable(gui_app
     src/main.cpp
-    raytracer/rt_engine.cpp
-    raytracer/camera.h
-    raytracer/color.h
-    raytracer/hittable.h
-    raytracer/hittable_list.h
-    raytracer/interval.h
-    raytracer/material.h
-    raytracer/ray.h
-    raytracer/rt_engine.h
-    raytracer/rtweekend.h
-    raytracer/sphere.h
-    raytracer/vec3.h
+    ${RAYTRACER_SRC}
 )
-
 
 target_include_directories(gui_app PUBLIC
     include
     raytracer
     ${IMGUI_DIR}
     ${IMGUI_DIR}/backends
+    ${CMAKE_SOURCE_DIR}/glm
+
 )
 
 target_link_libraries(gui_app

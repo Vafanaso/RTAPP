@@ -1,30 +1,31 @@
 #ifndef SPHERE_H
 #define SPHERE_H
-//==============================================================================================
-// Originally written in 2016 by Peter Shirley <ptrshrl@gmail.com>
-//
-// To the extent possible under law, the author(s) have dedicated all copyright
-// and related and neighboring rights to this software to the public domain
-// worldwide. This software is distributed without any warranty.
-//
-// You should have received a copy (see file COPYING.txt) of the CC0 Public
-// Domain Dedication along with this software. If not, see
-// <http://creativecommons.org/publicdomain/zero/1.0/>.
-//==============================================================================================
-#include "rtweekend.h"
 
 #include "hittable.h"
+#include "rtweekend.h"
 
 class sphere : public hittable {
 public:
   sphere(const point3 &center, double radius, shared_ptr<material> mat)
-      : center(center), radius(std::fmax(0, radius)), mat(mat) {}
+      : center_(center), radius_(std::fmax(0, radius)), mat_(mat) {}
 
+  // -------------------------
+  // Center access
+  // -------------------------
+  point3 &center_ref() { return center_; }
+  const point3 &center_ref() const { return center_; }
+
+  void set_center(const point3 &c) { center_ = c; }
+  void set_center(double x, double y, double z) { center_ = point3(x, y, z); }
+
+  // -------------------------
+  // HIT LOGIC
+  // -------------------------
   bool hit(const ray &r, interval ray_t, hit_record &rec) const override {
-    vec3 oc = center - r.origin();
+    vec3 oc = center_ - r.origin();
     auto a = r.direction().length_squared();
     auto h = dot(r.direction(), oc);
-    auto c = oc.length_squared() - radius * radius;
+    auto c = oc.length_squared() - radius_ * radius_;
 
     auto discriminant = h * h - a * c;
     if (discriminant < 0)
@@ -42,17 +43,17 @@ public:
 
     rec.t = root;
     rec.p = r.at(rec.t);
-    vec3 outward_normal = (rec.p - center) / radius;
+    vec3 outward_normal = (rec.p - center_) / radius_;
     rec.set_face_normal(r, outward_normal);
-    rec.mat = mat;
+    rec.mat = mat_;
 
     return true;
   }
 
 private:
-  point3 center;
-  double radius;
-  shared_ptr<material> mat;
+  point3 center_;
+  double radius_;
+  shared_ptr<material> mat_;
 };
 
 #endif

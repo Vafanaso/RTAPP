@@ -4,7 +4,7 @@
 # compile CXX with /usr/bin/c++
 CXX_DEFINES = 
 
-CXX_INCLUDES = -I/home/vafanaso/diploma/app/include -I/home/vafanaso/diploma/app/raytracer -I/home/vafanaso/diploma/app/imgui -I/home/vafanaso/diploma/app/imgui/backends
+CXX_INCLUDES = -I/home/vafanaso/diploma/app/include -I/home/vafanaso/diploma/app/raytracer -I/home/vafanaso/diploma/app/imgui -I/home/vafanaso/diploma/app/imgui/backends -I/home/vafanaso/diploma/app/glm
 
 CXX_FLAGS = -std=gnu++17
 
