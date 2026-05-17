@@ -1,5 +1,6 @@
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
+#include <cmath>
 #include <cstdio>
 #include <glad/glad.h>
 #include <vector>
@@ -23,14 +24,12 @@
 #include "../raytracer/sphere.h"
 
 // =====================================================
-//  OpenGL Preview Shader Sources
+//  Preview shader sources
 // =====================================================
 const char *preview_vs_src = R"(
 #version 330 core
 layout (location = 0) in vec3 aPos;
-
 uniform mat4 MVP;
-
 void main() {
     gl_Position = MVP * vec4(aPos, 1.0);
 }
@@ -39,11 +38,62 @@ void main() {
 const char *preview_fs_src = R"(
 #version 330 core
 out vec4 FragColor;
-
 void main() {
-    FragColor = vec4(0.9, 0.4, 0.3, 1.0);  // sphere color
+    FragColor = vec4(0.9, 0.4, 0.3, 1.0);
 }
 )";
+
+// =====================================================
+//  Mouse picking helpers
+// =====================================================
+struct ViewportCamera {
+  glm::vec3 eye;
+  glm::vec3 lookat;
+  glm::vec3 up;
+  float vfov_deg;
+};
+
+struct Ray3 {
+  glm::vec3 origin;
+  glm::vec3 dir;
+};
+
+// Construct a world-space ray from a mouse pixel inside the preview panel.
+// Mouse coords are panel-local with origin at the top-left (ImGui convention).
+static Ray3 ray_from_mouse(const ViewportCamera &c, float mx, float my, int w,
+                           int h) {
+  glm::vec3 forward = glm::normalize(c.lookat - c.eye);
+  glm::vec3 right = glm::normalize(glm::cross(forward, c.up));
+  glm::vec3 up = glm::cross(right, forward);
+
+  float aspect = (float)w / (float)h;
+  float h_world = 2.0f * std::tan(glm::radians(c.vfov_deg) * 0.5f);
+  float w_world = h_world * aspect;
+
+  float ndc_x = (mx / (float)w) * 2.0f - 1.0f;
+  float ndc_y = 1.0f - (my / (float)h) * 2.0f; // flip y: image is top-down
+
+  glm::vec3 dir = glm::normalize(forward +
+                                 (ndc_x * w_world * 0.5f) * right +
+                                 (ndc_y * h_world * 0.5f) * up);
+  return {c.eye, dir};
+}
+
+// Standard analytic ray-sphere intersection: returns true if the ray hits.
+static bool ray_hits_sphere(const Ray3 &r, const glm::vec3 &C, float radius) {
+  glm::vec3 oc = r.origin - C;
+  float a = glm::dot(r.dir, r.dir);
+  float b = 2.0f * glm::dot(oc, r.dir);
+  float c = glm::dot(oc, oc) - radius * radius;
+  return (b * b - 4.0f * a * c) > 0.0f;
+}
+
+// Intersect a ray with the plane defined by point P and normal N.
+static glm::vec3 ray_plane_intersect(const Ray3 &r, const glm::vec3 &P,
+                                     const glm::vec3 &N) {
+  float t = glm::dot(P - r.origin, N) / glm::dot(r.dir, N);
+  return r.origin + t * r.dir;
+}
 
 int main() {
   // ----------------------
@@ -78,7 +128,7 @@ int main() {
   ImGui::StyleColorsDark();
 
   // =====================================================
-  //  OPENGL SPHERE PREVIEW SETUP
+  //  OpenGL sphere preview setup
   // =====================================================
   SphereMesh previewMesh = CreateSphereMesh(30, 30);
   GLuint sphereVAO = previewMesh.vao;
@@ -87,7 +137,7 @@ int main() {
   GLuint previewShader = createShaderProgram(preview_vs_src, preview_fs_src);
 
   // =====================================================
-  //  RAYTRACER TEXTURE
+  //  Raytracer texture
   // =====================================================
   int rt_width = 400;
   int rt_height = 225;
@@ -99,14 +149,13 @@ int main() {
   glBindTexture(GL_TEXTURE_2D, raytex);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, rt_width, rt_height, 0, GL_RGBA,
                GL_UNSIGNED_BYTE, nullptr);
-
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
   bool need_rerender = true;
 
   // =====================================================
-  //  FRAMEBUFFER FOR OPENGL PREVIEW PANEL
+  //  FBO for OpenGL preview panel
   // =====================================================
   int preview_w = 640;
   int preview_h = 480;
@@ -115,7 +164,6 @@ int main() {
   glGenFramebuffers(1, &previewFBO);
   glBindFramebuffer(GL_FRAMEBUFFER, previewFBO);
 
-  // Color attachment (the texture ImGui will display)
   glGenTextures(1, &previewColor);
   glBindTexture(GL_TEXTURE_2D, previewColor);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, preview_w, preview_h, 0, GL_RGBA,
@@ -125,7 +173,6 @@ int main() {
   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
                          previewColor, 0);
 
-  // Depth attachment (needed for depth testing)
   glGenRenderbuffers(1, &previewDepth);
   glBindRenderbuffer(GL_RENDERBUFFER, previewDepth);
   glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, preview_w,
@@ -139,7 +186,7 @@ int main() {
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
   // =====================================================
-  //   BUILD RAYTRACER SCENE
+  //  Build raytracer scene
   // =====================================================
   RtScene scene;
 
@@ -160,19 +207,31 @@ int main() {
   cam.vup = vec3(0, 1, 0);
 
   // =====================================================
-  //  GUI SPHERE POSITION
+  //  GUI / interaction state
   // =====================================================
-  static float sphere_x = 0.0f;
-  static float sphere_y = 1.0f;
-  static float sphere_z = 0.0f;
+  float sphere_x = 0.0f;
+  float sphere_y = 1.0f;
+  float sphere_z = 0.0f;
+  const float sphere_radius = 1.0f;
+
+  // Preview camera (matches the lookAt below). Kept in one place so the
+  // picking math and the draw both use the same numbers.
+  const ViewportCamera viewportCam = {
+      glm::vec3(5.0f, 3.0f, 5.0f),  // eye
+      glm::vec3(0.0f, 1.0f, 0.0f),  // lookat
+      glm::vec3(0.0f, 1.0f, 0.0f),  // world up
+      45.0f                          // vertical FOV in degrees
+  };
+
+  bool dragging_sphere = false;
 
   // =====================================================
-  //   MAIN LOOP
+  //  Main loop
   // =====================================================
   while (!glfwWindowShouldClose(window)) {
     glfwPollEvents();
 
-    // --- RAYTRACING ---
+    // --- Raytrace on demand ---
     if (need_rerender) {
       printf("Raytracing...\n");
       render_rt_scene(scene, cam, pixels.data(), rt_width, rt_height);
@@ -184,9 +243,7 @@ int main() {
       need_rerender = false;
     }
 
-    // =====================================================
-    //  PREVIEW: RENDER INTO FBO (not the window)
-    // =====================================================
+    // --- Render preview into FBO ---
     glBindFramebuffer(GL_FRAMEBUFFER, previewFBO);
     glViewport(0, 0, preview_w, preview_h);
 
@@ -194,16 +251,13 @@ int main() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glEnable(GL_DEPTH_TEST);
 
-    glm::mat4 proj = glm::perspective(glm::radians(45.0f),
+    glm::mat4 proj = glm::perspective(glm::radians(viewportCam.vfov_deg),
                                       (float)preview_w / (float)preview_h,
                                       0.1f, 100.0f);
-
     glm::mat4 view =
-        glm::lookAt(glm::vec3(5, 3, 5), glm::vec3(0, 1, 0), glm::vec3(0, 1, 0));
-
+        glm::lookAt(viewportCam.eye, viewportCam.lookat, viewportCam.up);
     glm::mat4 model = glm::translate(glm::mat4(1.0f),
                                      glm::vec3(sphere_x, sphere_y, sphere_z));
-
     glm::mat4 mvp = proj * view * model;
 
     glUseProgram(previewShader);
@@ -215,9 +269,7 @@ int main() {
 
     glDisable(GL_DEPTH_TEST);
 
-    // =====================================================
-    //  BACK TO MAIN WINDOW — just clear it as a backdrop
-    // =====================================================
+    // --- Back to default framebuffer ---
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     int win_w, win_h;
     glfwGetFramebufferSize(window, &win_w, &win_h);
@@ -227,13 +279,13 @@ int main() {
     glClear(GL_COLOR_BUFFER_BIT);
 
     // =====================================================
-    //  IMGUI FRAME
+    //  ImGui frame
     // =====================================================
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
-    // --- Controls Window ---
+    // --- Controls ---
     ImGui::Begin("Controls");
     ImGui::Text("Move sphere:");
     bool moved = ImGui::SliderFloat("X", &sphere_x, -5.0f, 5.0f) |
@@ -251,19 +303,72 @@ int main() {
 
     ImGui::End();
 
-    // --- OpenGL Preview window (Blender-style viewport) ---
+    // --- OpenGL Preview window with mouse picking ---
     ImGui::Begin("OpenGL Preview");
-    ImGui::Image((void *)(intptr_t)previewColor,
-                 ImVec2((float)preview_w, (float)preview_h),
-                 ImVec2(0, 1), ImVec2(1, 0)); // UV flip: GL is bottom-up
+
+    // Reserve the image rectangle with an InvisibleButton so it captures
+    // mouse input; otherwise the click would fall through to the window
+    // and ImGui would drag the panel instead.
+    ImVec2 imgMin = ImGui::GetCursorScreenPos();
+    ImVec2 imgSize((float)preview_w, (float)preview_h);
+
+    ImGui::InvisibleButton("##preview_image", imgSize);
+    bool itemHovered = ImGui::IsItemHovered();
+
+    // Draw the texture into that same rectangle via the draw list.
+    ImGui::GetWindowDrawList()->AddImage(
+        (void *)(intptr_t)previewColor, imgMin,
+        ImVec2(imgMin.x + imgSize.x, imgMin.y + imgSize.y),
+        ImVec2(0, 1), ImVec2(1, 0));
+
+    // Panel-local mouse coords (only meaningful when hovering the image).
+    ImVec2 mousePos = ImGui::GetMousePos();
+    float mx = mousePos.x - imgMin.x;
+    float my = mousePos.y - imgMin.y;
+
+    // Click on the sphere -> start dragging.
+    if (!dragging_sphere && itemHovered && ImGui::IsMouseClicked(0)) {
+      Ray3 r = ray_from_mouse(viewportCam, mx, my, preview_w, preview_h);
+      glm::vec3 C(sphere_x, sphere_y, sphere_z);
+      if (ray_hits_sphere(r, C, sphere_radius)) {
+        dragging_sphere = true;
+      }
+    }
+
+    // While dragging: move the sphere on the camera-aligned plane through
+    // its current position. Update the preview every frame, but defer the
+    // (slow) raytracer re-render until the mouse is released.
+    if (dragging_sphere) {
+      if (ImGui::IsMouseDown(0)) {
+        Ray3 r = ray_from_mouse(viewportCam, mx, my, preview_w, preview_h);
+        glm::vec3 forward =
+            glm::normalize(viewportCam.lookat - viewportCam.eye);
+        glm::vec3 plane_point(sphere_x, sphere_y, sphere_z);
+        glm::vec3 new_center = ray_plane_intersect(r, plane_point, forward);
+
+        // Keep within the slider range so the UI stays consistent.
+        new_center.x = glm::clamp(new_center.x, -5.0f, 5.0f);
+        new_center.y = glm::clamp(new_center.y, -5.0f, 5.0f);
+        new_center.z = glm::clamp(new_center.z, -5.0f, 5.0f);
+
+        sphere_x = new_center.x;
+        sphere_y = new_center.y;
+        sphere_z = new_center.z;
+        sphere_obj->set_center(sphere_x, sphere_y, sphere_z);
+      } else {
+        dragging_sphere = false;
+        need_rerender = true;
+      }
+    }
+
     ImGui::End();
 
-    // --- Raytraced result window ---
+    // --- Raytraced result ---
     ImGui::Begin("Raytraced Image");
     ImGui::Image((void *)(intptr_t)raytex, ImVec2(rt_width, rt_height));
     ImGui::End();
 
-    // --- Draw ImGui ---
+    // --- Submit ---
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
